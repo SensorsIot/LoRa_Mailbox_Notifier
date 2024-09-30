@@ -143,27 +143,23 @@ void loop() {
   if (Serial2.available() > 0) {
     while (Serial2.available() > 0) {
       receivedCode = Serial2.read();
-      Serial.print(receivedCode, HEX);
+      //Serial.print(receivedCode, HEX);
       if (receivedCode == 0x55) {
-        transmissionSuccess = true;
+        Serial2.write(ACKNOWLEDGE);
+        Serial.println("Transmission acknowledged");
         mailBoxStatus = full;
         Serial.println("Mailbox Full");
         snprintf(msg, MSG_BUFFER_SIZE, "Mailbox #%ld", mailBoxStatus);
         client.publish("outTopic", msg);
       }
       if (receivedCode == 0xAA) {
-        transmissionSuccess = true;
+        Serial2.write(ACKNOWLEDGE);
+        Serial.println("Transmission acknowledged");
         mailBoxStatus = empty;
         Serial.println("Mailbox empty");
         snprintf(msg, MSG_BUFFER_SIZE, "Mailbox #%ld", mailBoxStatus);
         client.publish("outTopic", msg);
       }
     }
-  }
-  if (transmissionSuccess) {
-    Serial2.write(ACKNOWLEDGE);
-    Serial.println(mailBoxStatus);
-    transmissionSuccess = false;
-    Serial.println("Transmission acknowledged");
   }
 }
