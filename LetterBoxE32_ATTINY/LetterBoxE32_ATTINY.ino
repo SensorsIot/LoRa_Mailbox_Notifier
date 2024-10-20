@@ -1,18 +1,12 @@
 #include <avr/sleep.h>
 #include <avr/interrupt.h>
 
-#define SWITCH_OPENING 0
-#define SWITCH_DOOR 1
-#define LORA_DEVICE 2
-#define PIN3 3
-#define PIN4 4  // Serial
-#define PIN5 5  // Serial
-#define M0 6
-#define M1 7
-#define AUX 8
-#define TEST0 9
-#define TEST1 10
-#define PIN11 11
+#define SWITCH_OPENING 10  //PA3
+#define SWITCH_DOOR 0      //PA4
+#define M0 7               //PB0
+#define M1 6               //PB1
+#define AUX 3              // PA7
+
 
 #define FULL 0x55
 #define EMPTY 0xAA
@@ -81,6 +75,7 @@ void setup() {
   // Initialize Serial2 at 9600 baud rate
   for (byte i = 0; i <= 11; i++) pinMode(i, INPUT_PULLUP);  // to save deepsleep current
   Serial.begin(9600);
+  delay(1000);
   pinMode(M0, OUTPUT);
   pinMode(M1, OUTPUT);
   digitalWrite(M0, HIGH);
@@ -88,24 +83,16 @@ void setup() {
   pinMode(AUX, INPUT_PULLUP);
   pinMode(SWITCH_OPENING, INPUT_PULLUP);
   pinMode(SWITCH_DOOR, INPUT_PULLUP);
-  pinMode(TEST0, OUTPUT);
-  pinMode(TEST1, OUTPUT);
-
-  // all unused pins to save energy
-  pinMode(PIN3, INPUT_PULLUP);
-  pinMode(PIN11, INPUT_PULLUP);
 
   byte data[] = { 0xC0, 0x0, 0x1, 0x1A, 0x17, 0x44 };
   for (unsigned int i = 0; i < sizeof(data); i++) {
     Serial.write(data[i]);
   }
   delay(10);
-  //while (digitalRead(AUX) == LOW)
   goToSleep();
   digitalWrite(M0, LOW);
   digitalWrite(M1, LOW);
-  delay(10);
-  Serial.write(FULL);
+  Serial.write(EMPTY);
 }
 
 
