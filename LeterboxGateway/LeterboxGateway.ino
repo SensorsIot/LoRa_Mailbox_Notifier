@@ -1,11 +1,11 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include "secrets1.h"
+#include <ArduinoJson.h>
+#include "secrets.h"
 
 #define M0 21
 #define M1 19
-#define AUX 15
-
+#define AUX 2
 
 #define TXD2 17
 #define RXD2 16
@@ -16,15 +16,15 @@
 
 byte receivedCode = 0;
 bool transmissionSuccess = 0;
+String macAddr;
+String uniqueID;
+String messageTopic;
+String discoveryTopic;
 
 enum boxStatus {
   empty,
   full
 } mailBoxStatus = empty;
-
-// Update these with values suitable for your network.
-
-
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -34,9 +34,7 @@ char msg[MSG_BUFFER_SIZE];
 int value = 0;
 
 void setup_wifi() {
-
   delay(10);
-  // We start by connecting to a WiFi network
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
@@ -66,60 +64,77 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   Serial.println();
 
-  // Switch on the LED if an 1 was received as first character
+  // Switch on the LED if a '1' was received as the first character
   if ((char)payload[0] == '1') {
-    digitalWrite(2, LOW);  // Turn the LED on (Note that LOW is the voltage level
-    // but actually the LED is on; this is because
-    // it is active low on the ESP-01)
+    digitalWrite(2, LOW);  // Turn the LED on (active low)
   } else {
-    digitalWrite(2, HIGH);  // Turn the LED off by making the voltage HIGH
+    digitalWrite(2, HIGH);  // Turn the LED off
   }
 }
 
 void reconnect() {
-  // Loop until we're reconnected
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
-    // Create a random client ID
-    String clientId = "ESP8266Client-";
+    String clientId = "Mailbox-";
     clientId += String(random(0xffff), HEX);
-    // Attempt to connect
     if (client.connect(clientId.c_str())) {
       Serial.println("connected");
-      // Once connected, publish an announcement...
-      client.publish("MailboxStatus", "hello world");
-      // ... and resubscribe
-      // client.subscribe("inTopic");
+      //client.publish(messageTopic.c_str(), "reconnected");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
       delay(5000);
     }
   }
 }
 
+// Function to send MQTT discovery message
+void mqtt_discovery() {
+  if (!client.connected()) {
+    reconnect();
+  }
 
+  StaticJsonDocument<256> doc;  // Allocate memory for the JSON document
 
+  doc["name"] = "Mailbox";
+  doc["device_class"] = "occupancy";
+  doc["state_topic"] = "homeassistant/binary_sensor/" + uniqueID + "/state";
+  doc["unique_id"] = uniqueID;  // Use MAC-based unique ID
+
+  JsonObject device = doc.createNestedObject("device");
+  device["ids"] = macAddr;      // Use the full MAC address as identifier
+  device["name"] = "Mailbox";   // Device name
+  device["mf"] = "Sensorsiot";  // Include supplier info
+  device["mdl"] = "Notifier";
+  device["sw"] = "1.0";
+  device["hw"] = "0.9";
+  
+  char buffer[256];
+  serializeJson(doc, buffer);  // Serialize JSON object to buffer
+
+  Serial.println(discoveryTopic.c_str());
+  Serial.println(buffer);                                // Print the JSON payload to Serial Monitor
+  client.publish(discoveryTopic.c_str(), buffer, true);  // Publish to MQTT with retain flag set
+}
 
 void setup() {
-  // Initialize Serial2 at 9600 baud rate
   Serial.begin(115200);
   Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
   pinMode(M0, OUTPUT);
   pinMode(M1, OUTPUT);
   pinMode(AUX, INPUT_PULLUP);
-  // Array of hexadecimal values
-  byte data[] = { 0xC0, 0x0, 0x1, 0x1A, 0x17, 0x44 };
 
   setup_wifi();
   client.setServer(mqtt_server, 1883);
+  client.setBufferSize(512);
   client.setCallback(callback);
 
   digitalWrite(M0, HIGH);
   digitalWrite(M1, HIGH);
   delay(7);
+
+  byte data[] = { 0xC0, 0x0, 0x1, 0x1A, 0x17, 0x44 };
   for (int i = 0; i < sizeof(data); i++) {
     Serial2.write(data[i]);
     Serial.println(data[i], HEX);
@@ -127,39 +142,60 @@ void setup() {
   delay(10);
 
   while (digitalRead(AUX) == LOW)
-    digitalWrite(M0, LOW);
+    ;
+  digitalWrite(M0, LOW);
   digitalWrite(M1, LOW);
   delay(100);
   Serial2.flush();
+
+  // Get the MAC address of the board
+  macAddr = WiFi.macAddress();
+  Serial.println(macAddr);
+  String hi = macAddr;
+  hi.toLowerCase();
+  hi.replace(":", "");  // Remove colons from MAC address to make it topic-friendly
+  // Extract the last 6 characters of the MAC address (ignoring colons)
+  uniqueID = "mailbox" + hi.substring(hi.length() - 4);  // Use last 4 byte
+
+  messageTopic = "homeassistant/binary_sensor/" + uniqueID + "/state";
+  discoveryTopic = "homeassistant/binary_sensor/" + uniqueID + "/config";
+
+  // Send MQTT discovery message
+  mqtt_discovery();
   Serial.println("Init finished");
 }
-
 
 void loop() {
   if (!client.connected()) {
     reconnect();
   }
   client.loop();
+
   if (Serial2.available() > 0) {
     while (Serial2.available() > 0) {
       receivedCode = Serial2.read();
-      //Serial.print(receivedCode, HEX);
-      if (receivedCode == 0x55) {
-        Serial2.write(ACKNOWLEDGE);
-        Serial.println("Transmission acknowledged");
+      Serial.print(receivedCode, HEX);
+      if (receivedCode == ARRIVED) {
+        transmissionSuccess = true;
         mailBoxStatus = full;
         Serial.println("Mailbox Full");
-        snprintf(msg, MSG_BUFFER_SIZE, "Mailbox #%ld", mailBoxStatus);
-        client.publish("outTopic", msg);
+        // Publish the new mailbox state to the desired topic
+        client.publish(messageTopic.c_str(), "ON", true);  // Update mailbox status with "ON"
       }
-      if (receivedCode == 0xAA) {
-        Serial2.write(ACKNOWLEDGE);
-        Serial.println("Transmission acknowledged");
+
+      if (receivedCode == EMPTY) {
+        transmissionSuccess = true;
         mailBoxStatus = empty;
         Serial.println("Mailbox empty");
-        snprintf(msg, MSG_BUFFER_SIZE, "Mailbox #%ld", mailBoxStatus);
-        client.publish("outTopic", msg);
+        client.publish(messageTopic.c_str(), "OFF", true);  // Update mailbox status
       }
     }
+  }
+
+  if (transmissionSuccess) {
+    Serial2.write(ACKNOWLEDGE);
+    Serial.println(mailBoxStatus);
+    transmissionSuccess = false;
+    Serial.println("Transmission acknowledged");
   }
 }
