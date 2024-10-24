@@ -10,7 +10,7 @@
 #define TXD2 17
 #define RXD2 16
 
-#define ARRIVED 0x55
+#define FULL 0x55
 #define EMPTY 0xAA
 #define ACKNOWLEDGE 0x25
 
@@ -18,8 +18,8 @@ byte receivedCode = 0;
 bool transmissionSuccess = 0;
 String macAddr;
 String uniqueID;
-String messageTopic;
-String discoveryTopic;
+String stateTopicName;
+String discoveryTopicName;
 
 enum boxStatus {
   empty,
@@ -79,7 +79,7 @@ void reconnect() {
     clientId += String(random(0xffff), HEX);
     if (client.connect(clientId.c_str())) {
       Serial.println("connected");
-      //client.publish(messageTopic.c_str(), "reconnected");
+      //client.publish(stateTopicName.c_str(), "reconnected");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -113,9 +113,9 @@ void mqtt_discovery() {
   char buffer[256];
   serializeJson(doc, buffer);  // Serialize JSON object to buffer
 
-  Serial.println(discoveryTopic.c_str());
+  Serial.println(discoveryTopicName.c_str());
   Serial.println(buffer);                                // Print the JSON payload to Serial Monitor
-  client.publish(discoveryTopic.c_str(), buffer, true);  // Publish to MQTT with retain flag set
+  client.publish(discoveryTopicName.c_str(), buffer, true);  // Publish to MQTT with retain flag set
 }
 
 void setup() {
@@ -157,12 +157,12 @@ void setup() {
   // Extract the last 6 characters of the MAC address (ignoring colons)
   uniqueID = "mailbox" + hi.substring(hi.length() - 4);  // Use last 4 byte
 
-  messageTopic = "homeassistant/binary_sensor/" + uniqueID + "/state";
-  discoveryTopic = "homeassistant/binary_sensor/" + uniqueID + "/config";
+  stateTopicName = "homeassistant/binary_sensor/" + uniqueID + "/state";
+  discoveryTopicName = "homeassistant/binary_sensor/" + uniqueID + "/config";
 
   // Send MQTT discovery message
   mqtt_discovery();
-  Serial.println("Init finished");
+  Serial.println("Setup finished");
 }
 
 void loop() {
@@ -175,19 +175,18 @@ void loop() {
     while (Serial2.available() > 0) {
       receivedCode = Serial2.read();
       Serial.print(receivedCode, HEX);
-      if (receivedCode == ARRIVED) {
+      if (receivedCode == FULL) {
         transmissionSuccess = true;
         mailBoxStatus = full;
         Serial.println("Mailbox Full");
-        // Publish the new mailbox state to the desired topic
-        client.publish(messageTopic.c_str(), "ON", true);  // Update mailbox status with "ON"
+        client.publish(stateTopicName.c_str(), "ON", true);  // Update mailbox status
       }
 
       if (receivedCode == EMPTY) {
         transmissionSuccess = true;
         mailBoxStatus = empty;
         Serial.println("Mailbox empty");
-        client.publish(messageTopic.c_str(), "OFF", true);  // Update mailbox status
+        client.publish(stateTopicName.c_str(), "OFF", true);  // Update mailbox status
       }
     }
   }
