@@ -1,7 +1,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include "secrets1.h"
+#include "secrets.h"
 
 #define M0 21
 #define M1 19
@@ -134,7 +134,8 @@ void setup() {
   digitalWrite(M1, HIGH);
   delay(7);
 
-  byte data[] = { 0xC0, 0x0, 0x1, 0x1A, 0x17, 0x44 };
+  byte data[] = { 0xC0, 0x0, 0x1, 0x1A, 0x17, 0x47 }; // for 30dBm Module
+  // byte data[] = { 0xC0, 0x0, 0x1, 0x1A, 0x17, 0x44 };  // for 20dBm Module
   for (int i = 0; i < sizeof(data); i++) {
     Serial2.write(data[i]);
     Serial.println(data[i], HEX);

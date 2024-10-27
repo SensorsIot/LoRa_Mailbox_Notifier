@@ -104,7 +104,8 @@ void setup() {
   pinMode(SWITCH_DOOR, INPUT_PULLUP);
 
   delay(100);
-  byte data[] = { 0xC0, 0x0, 0x1, 0x1A, 0x17, 0x44 };
+  byte data[] = { 0xC0, 0x0, 0x1, 0x1A, 0x17, 0x47 }; // for 30dBm Module
+  // byte data[] = { 0xC0, 0x0, 0x1, 0x1A, 0x17, 0x44 };  // for 20dBm Module
   for (unsigned int i = 0; i < sizeof(data); i++) {
     Serial.write(data[i]);
   }
