@@ -5,7 +5,7 @@
 
 #define M0 21
 #define M1 19
-#define AUX 2
+#define AUX 4
 
 #define TXD2 17
 #define RXD2 16
