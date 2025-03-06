@@ -15,7 +15,6 @@
 #define ACKNOWLEDGE 0x25
 
 byte receivedCode = 0;
-bool transmissionSuccess = 0;
 String macAddr;
 String uniqueID;
 String messageTopic;
@@ -109,13 +108,19 @@ void mqtt_discovery() {
   device["mdl"] = "Notifier";
   device["sw"] = "1.0";
   device["hw"] = "0.9";
-  
+
   char buffer[256];
   serializeJson(doc, buffer);  // Serialize JSON object to buffer
 
   Serial.println(discoveryTopic.c_str());
   Serial.println(buffer);                                // Print the JSON payload to Serial Monitor
   client.publish(discoveryTopic.c_str(), buffer, true);  // Publish to MQTT with retain flag set
+}
+
+void transmissionSuccess() {
+  Serial2.write(ACKNOWLEDGE);
+  Serial.println(mailBoxStatus);
+  Serial.println("Transmission acknowledged");
 }
 
 void setup() {
@@ -171,31 +176,20 @@ void loop() {
   }
   client.loop();
 
-  if (Serial2.available() > 0) {
-    while (Serial2.available() > 0) {
-      receivedCode = Serial2.read();
-      Serial.print(receivedCode, HEX);
-      if (receivedCode == ARRIVED) {
-        transmissionSuccess = true;
-        mailBoxStatus = full;
-        Serial.println("Mailbox Full");
-        // Publish the new mailbox state to the desired topic
-        client.publish(messageTopic.c_str(), "ON", true);  // Update mailbox status with "ON"
-      }
-
-      if (receivedCode == EMPTY) {
-        transmissionSuccess = true;
-        mailBoxStatus = empty;
-        Serial.println("Mailbox empty");
-        client.publish(messageTopic.c_str(), "OFF", true);  // Update mailbox status
-      }
-    }
+  receivedCode = Serial2.read();
+  if (receivedCode != 0xFF) Serial.println(receivedCode, HEX);
+  if (receivedCode == ARRIVED) {
+    transmissionSuccess();
+    mailBoxStatus = full;
+    Serial.println("Mailbox Full");
+    // Publish the new mailbox state to the desired topic
+    client.publish(messageTopic.c_str(), "ON", true);  // Update mailbox status with "ON"
   }
 
-  if (transmissionSuccess) {
-    Serial2.write(ACKNOWLEDGE);
-    Serial.println(mailBoxStatus);
-    transmissionSuccess = false;
-    Serial.println("Transmission acknowledged");
+  if (receivedCode == EMPTY) {
+    transmissionSuccess();
+    mailBoxStatus = empty;
+    Serial.println("Mailbox empty");
+    client.publish(messageTopic.c_str(), "OFF", true);  // Update mailbox status
   }
 }

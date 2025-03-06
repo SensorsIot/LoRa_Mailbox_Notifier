@@ -18,8 +18,8 @@ bool transmitted = false;
 bool acknowledged = false;
 unsigned long transmissionTime = millis();
 int retransmissions = 0;
-bool opening_pressed = false;
-bool door_pressed = false;
+volatile bool opening_pressed = false;
+volatile bool door_pressed = false;
 
 enum boxStatus {
   empty,
@@ -27,14 +27,13 @@ enum boxStatus {
 } mailBoxStatus = empty;
 
 enum programstat {
-  boxinit,
   boxfilled,
   boxemptied,
   boxfull,
   boxempty,
   waitackfull,
   waitackempty
-} programStatus;
+} programStatus = boxempty;
 
 void receive() {
   byte _receivedCode = 0;
@@ -70,16 +69,6 @@ void wakeUpOpening() {
 }
 
 void goToSleep() {
-  /*
-  Serial.print("opening_pressed ");
-  Serial.print(opening_pressed);
-  Serial.print(" door_pressed ");
-  Serial.println(door_pressed);
-  while (digitalRead(SWITCH_OPENING) != HIGH && digitalRead(SWITCH_DOOR != HIGH)) {  // debounce
-    delay(100);
-  }
-  Serial.println(" go to sleep");
-  */
   Serial.flush();
   digitalWrite(M0, HIGH);
   digitalWrite(M1, HIGH);
@@ -120,12 +109,8 @@ void setup() {
 
 void loop() {
   switch (programStatus) {
-    case boxinit:
-      //exit:
-      if (digitalRead(SWITCH_OPENING) == LOW) programStatus = boxfilled;
-      if (digitalRead(SWITCH_DOOR) == LOW) programStatus = boxemptied;
-      break;
     case boxfilled:
+      delay(20);
       Serial.write(FULL);
       Serial.flush();
       transmissionTime = millis();
@@ -134,6 +119,7 @@ void loop() {
       programStatus = waitackfull;
       break;
     case boxemptied:
+      delay(20);
       Serial.write(EMPTY);
       Serial.flush();
       transmissionTime = millis();
