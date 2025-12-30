@@ -1,0 +1,91 @@
+substitutions:
+  name: briefkasten-gw
+  friendly_name: Briefkasten GW
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  min_version: 2025.11.0
+  name_add_mac_suffix: false
+  project:
+    name: esphome.web
+    version: dev
+  on_boot:
+    priority: 100
+    then:
+      - output.turn_on: m0_pin
+      - output.turn_on: m1_pin
+      - delay: 20ms
+      - uart.write: [0xC0, 0x00, 0x01, 0x1A, 0x17, 0x47]
+      - delay: 500ms
+      - output.turn_off: m0_pin
+      - output.turn_off: m1_pin
+
+external_components:
+  - source:
+      type: local
+      path: ./esphome/components
+
+esp8266:
+  board: d1_mini
+
+logger:
+  level: DEBUG
+
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+  min_auth_mode: WPA2
+
+web_server:
+  port: 80
+
+button:
+  - platform: restart
+    name: "Restart Device"
+  - platform: safe_mode
+    name: "Restart in Safe Mode"
+  - platform: factory_reset
+    name: "Restart with Factory Default Settings"
+
+uart:
+  id: uart_bus
+  tx_pin: D7
+  rx_pin: D6
+  baud_rate: 9600
+
+output:
+  - platform: gpio
+    pin: D1
+    id: m0_pin
+  - platform: gpio
+    pin: D2
+    id: m1_pin
+
+text_sensor:
+  - platform: uart_mailbox_notifier
+    id: uart_readline
+    name: "UART Readline"
+    uart_id: uart_bus
+    internal: true
+
+binary_sensor:
+  - platform: template
+    id: mailbox_state
+    name: "Mailbox State"
+    lambda: |-
+      if (id(uart_readline).state == "true") {
+        return true;
+      } else if (id(uart_readline).state == "false") {
+        return false;
+      }
+      return false;
+    on_state:
+      then:
+        - uart.write: [0x25]
